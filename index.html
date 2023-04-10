@@ -1,0 +1,355 @@
+<!DOCTYPE HTML>
+<html>
+	<head><title>Hackberry</title></head>
+	<body>
+	<canvas id="myCanvas" width="1440" height="920"></canvas>
+	<script type="module">
+
+import {BombGuy} from "./BombGuy.js";
+import {Player} from "./Player.js";
+import {Spider} from "./Spider.js";
+import {TileSet} from "./TileSet.js";
+import {GamepadController, WASDController} from "./Controllers.js";
+
+var keysDown = {
+	ArrowLeft: false,
+	ArrowUp: false,
+	ArrowRight: false,
+	ArrowDown: false,
+	Space: false
+};
+document.addEventListener("keydown", function(event) { keysDown[event.code] = true});
+document.addEventListener("keyup", function(event) { keysDown[event.code] = false});
+window.addEventListener('gamepadconnected', event => {
+	console.log('Gamepad connected:')
+	console.log(event.gamepad)
+});
+window.addEventListener('gamepaddisconnected', event => {
+	console.log('Gamepad disconnected:')
+	console.log(event.gamepad)
+});
+const canv = document.getElementById('myCanvas');
+const ctx = canv.getContext('2d');
+
+// This makes individual characters in strings adjustable
+// It makes the map adjustment a lot more convenient
+String.prototype.replaceAt=function(index, replacement) {
+    return this.substr(0, index) + replacement+ this.substr(index + replacement.length);
+}
+
+setInterval(update, 20);
+let textSize = 50;
+let frame = 0;
+let playersTouching = false;
+const physics = {
+	maxSpeed: 10,
+	jumpHeight: -12.5,
+	gravity: 1,
+	friction: 0.88,
+};
+const screenCloak = new Image();
+screenCloak.src = 'ScreenCloak.png';
+const map = {
+	tiles:																	 																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																			   					       
+	"fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaffaaaaaaaaaaaaaaeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaffaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaffaaaaaaaaaaaaabbbaaaaaaeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaffaaaaaaaaabbaababaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaffaaaaaaaaaabbabbbaaaabbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaffaaaaaabaaaaaaaaaaaaabaaabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaffaaaaaaaaaaaaaaaaaaaabaaabaaaaabbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaffbbbbaaaaaaaaabbbbbaabbbbbaaaaaaaaaabbaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbaffbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbaaaaaaaaaaaaaaaaaffbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbaaaaaaaaaaaaaaaaaaaaaaffbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbffbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbaaaaaaaaaaaaaaaaaaaaaaaabbaaaaaaaaaaffbbbbaaaaaaaaaaaaaaaaaaaaaaaaabbbbbaaaaaaaaaaaaaaaaaaaaaaabbaaaaaaaaaaaffbbbbbaaaaaaaaaaaaaaaaaaaaaaabbbbbbaaaaaaaaaaaaaaaaaaaaaabbaaaaaaaaaaaaffbbbbbaaaaaaaaaaaaabbaaabbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaabbaaaaaaaaaaaaaffbbbbbaaaaaaaaaaaabbbaaabbbbbbaaaaaaaaaaaaaaaaaaaaaaaaabbaaabbbbaaaaaaaffbbbbbaaaaaaaaaaabbbbaaabbbbbaaaaaaaaaaaaaaaaaaaaaaaaabbaaaaaaaaaaaaabbffbbbbaaaaaaaaaaabbbbbaaaacaaaaaaaaaaaaaaaaaaaaaaaaaaabbaaaaaaaaaaaaaaaaffcaaaaaaaaaebbbbbbbbbaaaa1aaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaff0aaaabbbbbbbbbbbbbbbaaabbbaaaaaaaaaaaaaaaaaaaaaaaabbaaaaaaaaaaaaaaaaaaffbbbbbbbbbbbbbbbbbbbbaaabbbbaaaaaaaaaaaaaaaaaaaaaabbbaaaaaaaaaaaaaaabbbffbbbbbbbbbbbbbaaaaaabaaabaaaaaaaaaaaaaaaaaaaaaaaaabbbaaaaaaaaaaaaaaaaaaffbbbbbbbbbbbbbaaaaaabaaabaaaaaaaaaaaaaaaaaaaaaaaaabbbaaaaaaaaaaaaaaaaaaffbbbbbbbbbbbbbaaaaaabaaabaaaaaaaaaaaaaaaaaaaaaabaabbbaaaaaaaaaaabbbaabaffbbbbbbbbbbbbbaaaaabbaaabbaaaaaaaaaaaaaaaaaaaabbaabbbaaaaaaaaaaabbbaabaffbbbbbbbbbbbbbaaaaabaaaaabaaaaaaaaaaaaaaaaaaabbbaabbbaaaaaaaaaaabbbaabaffbbbbbbbbbbbbbaaaaabaaaaabaaaaaaaaaaaaaaaaaabbbbaabbbaabbbbbbbbbbbbbbbbffaaaaaaaaaaaaaaaaaabaaaaabaaaaaaaaaaaaaaaaabbaaaaaaaaaaaaaaaaaaaaaaaaaaffaaaaaaaaaaaaaaaaabbaaaaabbaaaaaaaaaaaaaaabbaaaaaaaaaaaaaaaaaaaaaaaaaaaffaaaaaaaaaaaaaaaaabaaaaaaabaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbaaffaaaaaaaaaaaaaaaaabaaaaaaabaaaaaaaaaaaaabbaaaaaabaaaaaaaaaaaaaaaaaaabaaffaaaaaaaaaaaaaaaaabaaaaaaabaaaaaaaaaaaabbaaaaaaabaaaaaaaaaaaaaaaaaaabaaffaaaaaaaaaaaaaaaaabaaaaaaabaaaaaaaaaaabbaaaaaaaababbbbbaaaabbbbbbaaabaaffaaaaaaaaaaaaaaaaabaaaaaaabaaaaaaaaaabbaaaaaaaaabaaaabbaaaabbaaaaaaabaaffaaaaaaaaaaaaaaaaabbbaaabbbaaaaaaaaabbaaaabbbaaabaaaabbaaaabbaaaaaaabaaffaaaaaaaaaaaaaaaaaaabaaabaaaaaaaaaabbaaabbbabbaabaaaabbaaaabbaaaaaaabaaffaaaaaaaaaaaaaaaaaaabaaabaaaaaaaaabbaaaaaaaabaaabaaaabbaaaabbaaaaaaabaaffaaaaaaaaaaaaaaaaaaabaaabaaaaaaaabbaaaaaaaaabaaabbbaabbaaaabbaaabbbbbaaffaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbabaaabbbaabbaaaabbaaaaaaabaaffaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbaaabbaaabbababbbbbaabbaaaabbaaaaaaabaaffaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbaaaaaaaaaaaabaaaaaaaabbaaaabbaaaaaaabaaffaaaaaaaaaaaaaaaaaaaaaaaaaaaabbcaaaaaaaaaaaabaaaaaaaabbaaaabbaaaaaaaaacffaaaaaaaaaaaaaaaaaaaaaaaaaaabba1aaaabaabaaaabaaaaaaaabbaaaabbaaaaaaaaa0ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+	length: 2,
+	height: 2,
+	players: [],
+	platforms: [],
+	doors: [],
+	tileThings: [],
+	things: [],
+	getPlatformCollisions: getPlatformCollisions,
+	physics: physics,
+	distance: (x1, y1, x2, y2) => Math.sqrt((x1-x2)*(x1-x2) + (y1-y2)*(y1-y2)),
+	addExplosion: (pixelX, pixelY, size) => {
+		//size += 1;
+		const cx = Math.round(pixelX / 40);
+		const cy = Math.round(pixelY / 40);
+		for(let x = cx - size; x <= cx + size; x++) {
+			for(let y = cy - size; y <= cy + size; y++) {
+				const dist = map.distance(x, y, cx, cy);
+				if(dist <= size) {
+					const pos = x + canv.width/40 * map.length * y;
+					if (map.tiles.charAt(pos) !== 'f') {map.tiles = map.tiles.replaceAt(pos, 'a');}
+				}
+			}
+		}
+		for(const p of map.players) {
+			p.explosion(pixelX, pixelY, size);
+		}
+	}
+};
+
+map.players.push(new Player(200, 400, map));
+
+map.things.push(new Spider(300, 200));
+map.things.push(new Spider(700, 600));
+map.things.push(new Spider(900, 300));
+
+function update () {
+	if (map.players[0].controller) {
+		game();
+	} else {
+		scanForController();
+		rect(0, 0, canv.width, canv.height, 'black');
+		ctx.fillStyle = 'white';
+		ctx.font = textSize + 'px Arial';
+		ctx.fillText ("PRESS ANY BUTTON\nOR W TO START", 500 - textSize * 5, canv.height / 2);
+		if (frame % 30 < 15) {
+			textSize += 0.5;
+		} else {
+			textSize -= 0.5;
+		}
+	}
+	frame++;
+}
+
+let scrollX = 0;
+let scrollY = 0;
+
+function game() {
+	rect(0, 0, canv.width, canv.height, 'black');
+	renderTiles();
+
+	for (let i=0; i<map.things.length; i++) {
+		if(map.things[i]) {
+			let result = map.things[i].update(map);
+			if(result === "remove") {
+				map.things.splice(i, 1);
+				i--;
+			}
+		}
+	}
+	for (let i=0; i<map.things.length; i++) {
+		if(map.things[i]) {
+			map.things[i].render(ctx, scrollX, scrollY);
+		}
+	}
+	for (let player of map.players) {
+		player.update(map);
+	}
+	scrollingLogic(map.players[0].x, map.players[0].y);
+	ctx.drawImage(screenCloak, map.players[0].x - scrollX - canv.width + 100, map.players[0].y - scrollY - canv.height - 50);
+	for (let player of map.players) {
+		player.render(ctx, scrollX, scrollY);
+	}
+}
+
+const xScrollingBoundary = 500;
+const yScrollingBoundary = 300;
+
+function scrollingLogic(playerX, playerY) {
+	if (playerX - scrollX <= xScrollingBoundary) {
+		scrollX = playerX - xScrollingBoundary;
+	}
+	if (playerX - scrollX >= canv.width - xScrollingBoundary) {
+		scrollX = playerX - canv.width + xScrollingBoundary;
+	}
+	if (playerY - scrollY <= yScrollingBoundary) {
+		scrollY = playerY - yScrollingBoundary;
+	}
+	if (playerY - scrollY >= canv.height - yScrollingBoundary) {
+		scrollY = playerY - canv.height + yScrollingBoundary;
+	}
+	if (scrollX < 0) scrollX = 0;
+	if (scrollX > canv.width) scrollX = canv.width;
+	if (scrollY < 0) scrollY = 0;
+	if (scrollY > canv.height) scrollY = canv.height;
+}
+
+function renderTiles() {
+	let tileY = 0;
+	let tileX = 0;
+	for (let i=0; i<map.tiles.length; i++) {
+		TileSet.drawTile(ctx, 'a', tileX - scrollX, tileY - scrollY);
+		tileX += 40;
+		if (tileX == map.length * canv.width) {
+			tileY += 40;
+			tileX = 0;
+		}
+	}
+
+	tileY = 0;
+	tileX = 0;
+	map.platforms = [];
+	for (let i=0; i<map.tiles.length; i++) {
+		drawTile(tileX, tileY, i);
+		tileX += 40;
+		if (tileX == map.length * canv.width) {
+			tileY += 40;
+			tileX = 0;
+		}
+	}
+}
+
+function drawTile(x, y, type) {
+	let place = map.tiles.charAt(type);
+	switch(place) {
+		case 'b': case 'f':
+			const leftLetter = map.tiles.charAt(type-1);
+			const downLetter = map.tiles.charAt(type+canv.width/40*map.length);
+			const rightLetter = map.tiles.charAt(type+1);
+			const upLetter = map.tiles.charAt(type-canv.width/40*map.length);
+			TileSet.drawTile(ctx, place, x - scrollX, y - scrollY, leftLetter, downLetter, rightLetter, upLetter);
+			map.platforms.push({x:x, y:y, w:40, h:40});
+			break;
+		case 'c':
+			if(typeof map.tileThings[type] === "undefined") {
+				const doorNumber = parseInt(map.tiles.charAt(type + canv.width*map.length/40));
+				const door = createNewDoor(x, y, doorNumber);
+				map.tileThings[type] = door;
+				map.things.push(door);
+				map.doors.push(door);
+			}
+			break;
+
+		case 'S':
+			if(typeof map.tileThings[type] === "undefined") {
+				const shooter = new Shooter(x, y);
+				map.tileThings[type] = shooter;
+				map.things.push(shooter);
+			}
+			TileSet.drawShooter(ctx, x - scrollX, y - scrollY);
+			break;
+		case 'e':
+			if(typeof map.tileThings[type] === "undefined") {
+				const bombGuy = new BombGuy(x, y, TileSet);
+				map.tileThings[type] = bombGuy;
+				map.things.push(bombGuy);
+			}
+			break;
+	}
+}
+
+function rect (x, y, w, h, c) {
+	ctx.fillStyle = c;
+	ctx.fillRect(x, y, w, h);
+}
+
+function randomColor() {
+	return '#'+(0x1000000+(Math.random())*0xffffff).toString(16).substr(1,6);
+}
+
+function scanForController() {
+	const gamepads = navigator.getGamepads()
+	if (gamepads[0]) {
+		map.players[0].controller = new GamepadController(0);
+	} else if(keysDown.KeyW) {
+		map.players[0].controller = new WASDController(keysDown);
+	}
+}
+
+class Shooter {
+
+	constructor(x, y) {
+		this.x = x;
+		this.y = y;
+		this.charge = Math.floor(Math.random() * -100);
+	}
+
+	update() {
+		this.charge++;
+		if(this.charge < 100) return;
+		map.things.push(new Fireball(this.x - 6, this.y + 20, -8, 0));
+		this.charge = 0;
+	}
+
+	render() {
+		// rendered as a tile
+	}
+
+}
+
+class Fireball {
+
+	constructor(x, y, dx, dy) {
+		this.x = x;
+		this.y = y;
+		this.dx = dx;
+		this.dy = dy;
+	}
+
+	update() {
+		this.x += this.dx;
+		this.y += this.dy;
+		for (let playa of map.players) {
+			if(this.x > playa.x && this.x < playa.x + playa.w && this.y > playa.y && this.y < playa.y + playa.h) {
+				playa.xV += this.dx * 2;
+				return "remove";
+			}
+		}
+		for(const plat of map.platforms) {
+			if(this.x >= plat.x && this.x <= plat.x + plat.w && this.y >= plat.y && this.y <= plat.y + plat.h) {
+				return "remove";
+			}
+		}
+	}
+
+	render() {
+		TileSet.drawFireball(this.x - scrollX, this.y - scrollY);
+	}
+}
+
+function createNewDoor(x, y, doorNumber) {
+	return {
+		firstDoorX: x,
+		firstDoorY: y,
+		number: doorNumber,
+		update: function() {},
+		render: function() {
+			TileSet.drawTile(ctx, 'c', this.firstDoorX - scrollX, this.firstDoorY - scrollY);
+		},
+		findConnectingDoor: function(allDoors) {
+			for(let door of allDoors) {
+				if(door.number === this.number && door !== this) {
+					return door;
+				}
+			}
+			console.error(`Can't find connecting door for ${this.number}.`);
+			return null;
+		}
+	};
+}
+
+
+// "thing" needs a .x, .y, .w, .h, .prevX, .prevY
+// returned is an object that gives the pixel coordinate
+// of that platform edge that "thing" is touching, or false
+// if it's not touching a wall on that side
+function getPlatformCollisions(p) {
+	// we'll set these to numbers if the player is blocked at that pixel position
+	const result = {
+		top: false,
+		bottom: false,
+		left: false,
+		right: false
+	}
+
+	for (let plat of map.platforms) {
+		const isTouchingX = p.x <= plat.x + plat.w && p.x + p.w >= plat.x;
+		const isTouchingY = p.y <= plat.y + plat.h && p.y + p.h >= plat.y;
+		const isTouching = isTouchingX && isTouchingY;
+		if(!isTouching) {
+			continue;
+		}
+		// intersecting means you're *inside* that plat;
+		// you can TOUCH a plat without INTERSECTING it.
+		const isIntersectingX = p.x < plat.x + plat.w && p.x + p.w > plat.x;
+		const isIntersectingY = p.y < plat.y + plat.h && p.y + p.h > plat.y;
+		if (isIntersectingX && (p.prevY + p.h < plat.y || p.y + p.h === plat.y)) {
+			result.bottom = plat.y;
+		} else if (isIntersectingX && (p.prevY > plat.y + plat.h || p.y === plat.y + plat.h)) {
+			result.top = plat.y + plat.h;
+		} else if (isIntersectingY && p.prevX < plat.x) {
+			result.right = plat.x;
+		} else if (isIntersectingY && p.prevX > plat.x) {
+			result.left = plat.x + plat.w;
+		}
+	}
+	return result;
+}
+// Designed by Adam Pettys 4/10/2023
+</script>
+</body>
+</html>

@@ -1,0 +1,255 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<title>Hackberry Level Designer</title>
+	<style>
+		#map-loader {
+			flex-direction: column;
+			position: absolute;
+			background-color: rgba(255,255,255,0.9);
+			width: 800px;
+			top: 12.5vh;
+			left: 50px;
+			padding: 2em;
+		}
+		#map-loader-input {
+			height: 60vh;
+		}
+	</style>
+	</head>
+	<body>
+	<canvas id="myCanvas" width="1440" height="920"></canvas>
+	<div id="map-loader" style="display: none;">
+		<textarea id="map-loader-input"></textarea>
+		<button id="load-btn">Load</button>
+		<button id="cancel-btn">Cancel</button>
+	</div>
+	<script type="module">
+import {TileSet} from "./TileSet.js";
+
+document.getElementById("load-btn").addEventListener("click", evt => {
+	let newInput = document.getElementById("map-loader-input").value;
+	newInput = newInput.replace(/[ \t\n"+;,]/g, "");
+	console.log(newInput);
+	copyStringToMapArray(newInput);
+	copyMapArrayToString();
+	document.getElementById("map-loader").style.display = "none";
+	captureMapInput = true;
+});
+document.getElementById("cancel-btn").addEventListener("click", evt => {
+	document.getElementById("map-loader").style.display = "none";
+	captureMapInput = true;
+});
+
+var mouseX = 0;
+var mouseY = 0;
+var mouseDown = false;
+var captureMapInput = true;
+var keysDown = {
+	ArrowLeft: false,
+	ArrowUp: false,
+	ArrowRight: false,
+	ArrowDown: false,
+	Space: false,
+	KeyI: false
+};
+document.addEventListener('mousemove', e => {
+	mouseX = e.clientX;
+	mouseY = e.clientY;
+	mouseX -= 8;
+	mouseY -= 8;
+	mouseX += scrollX;
+	mouseY += scrollY;
+});
+document.addEventListener("mousedown", function(e) { if (captureMapInput) mouseDown = true});
+document.addEventListener("mouseup", function(e) { if (captureMapInput) mouseDown = false});
+document.addEventListener("keydown", function(e) { if (captureMapInput) keysDown[e.code] = true});
+document.addEventListener("keyup", function(e) { if (captureMapInput) keysDown[e.code] = false});
+
+const canv = document.getElementById('myCanvas');
+const ctx = canv.getContext('2d');
+let scrollX = 0;
+let scrollY = 0;
+const scrollSpeed = 10;
+let map = {tiles:'', length:2, height:2};   //23
+for (let i=0; i < (canv.width / 40 * map.length) * (canv.height / 40 * map.height);i++) {
+	let currTile = 'a';
+	if (i < canv.width / 40 * map.length || i % (canv.width / 40 * map.length) == 0 || i % (canv.width / 40 * map.length) == (canv.width / 40 * map.length - 1) || i > (canv.width / 40 * map.length) * (canv.height / 40 * map.height) - canv.width / 40 * map.length) {
+		currTile = 'f';
+	}
+	map.tiles = map.tiles.concat(currTile);
+}
+
+let mapArray = [];
+for (let i=0; i<map.tiles.length; i++) {
+	mapArray.push(map.tiles.charAt(i));
+}
+const inputMap = localStorage.getItem("mapid");
+if (inputMap) {
+	copyStringToMapArray(inputMap);
+}
+copyMapArrayToString();
+setInterval(update, 20);
+let frame = 0;
+let switchFrame = 0;
+let currentTile = 'b';
+let door = -0.5;
+const toolSequence = ['a', 'b', 'c', 'e', 'g', '.', 'f', 'h'];
+
+function update () {
+	if (keysDown.ArrowRight) {
+		scrollX += scrollSpeed;
+		mouseX += scrollSpeed;
+	}
+	if (keysDown.ArrowLeft) {
+		scrollX -= scrollSpeed;
+	}
+	if (keysDown.ArrowUp) {
+		scrollY -= scrollSpeed;
+	}
+	if (keysDown.ArrowDown) {
+		scrollY += scrollSpeed;
+	}
+
+	if (keysDown.Space && switchFrame >= 9) {
+		const idx = toolSequence.indexOf(currentTile);
+		currentTile = toolSequence[(idx + 1) % toolSequence.length];
+		switchFrame = 0;
+	}
+	if (keysDown.KeyC && switchFrame >= 6) {
+		copyMapIdToClipboard();
+		switchFrame = 0;
+	}
+	if (keysDown.KeyV) {
+		for(let key in keysDown) keysDown[key] = false;
+		mouseDown = false;
+		captureMapInput = false;
+		document.getElementById("map-loader").style.display = "flex";
+	}
+	switchFrame++;
+
+	rect(0, 0, canv.width, canv.height, 'black');
+
+	mouseX = Math.floor(mouseX / 40) * 40;
+	mouseY = Math.floor(mouseY / 40) * 40;
+
+	if (mouseDown) {
+		if (currentTile == 'c') {
+			if (mapArray[mouseX/40 + ((mouseY/40)*canv.width*map.length/40) + canv.width*map.length/40] !== Math.floor(door)) {
+				door += 0.5;
+			}
+			mapArray[mouseX/40 + ((mouseY/40)*canv.width*map.length/40)] = currentTile;
+			mapArray[mouseX/40 + ((mouseY/40)*canv.width*map.length/40) + canv.width*map.length/40] = Math.floor(door);
+		} else {
+			mapArray[mouseX/40 + ((mouseY/40)*canv.width*map.length/40)] = currentTile;
+		}
+		copyMapArrayToString();
+		localStorage.setItem("mapid", map.tiles);
+	}
+
+	renderTiles();
+	const mx = mouseX - scrollX;
+	const my = mouseY - scrollY;
+	TileSet.drawTile(ctx, currentTile, mx, my);
+	rect(mx, mouseY - scrollY, 40, 40, 'rgba(255, 255, 255, 0.5)');
+
+	ctx.fillStyle = 'white';
+	ctx.font = '12px Arial';
+	let y = 50;
+	ctx.fillText("C - copy map to clipboard", 80, y); y+=16;
+	ctx.fillText("V - load a different map", 80, y); y+=16;
+	ctx.fillText(`Space - change tool (current: ${TileSet.tileName(currentTile)})`, 80, y); y+=16;
+	ctx.fillText("Work automatically saved.", 80, y);
+	frame++;
+}
+
+function copyStringToMapArray(tiles) {
+	for (let i=0; i<tiles.length; i++) {
+		mapArray[i] = tiles.charAt(i);
+	}
+}
+
+function copyMapArrayToString() {
+	map.tiles = '';
+	for (let i=0; i<mapArray.length; i++) {
+		map.tiles = map.tiles + mapArray[i];
+	}
+}
+
+const xScrollingBoundary = 500;
+const yScrollingBoundary = 300;
+
+function scrollingLogic(playerX, playerY) {
+
+	if (scrollX < 0) scrollX = 0;
+	if (scrollX > canv.width) scrollX = canv.width;
+	if (scrollY < 0) scrollY = 0;
+	if (scrollY > canv.height) scrollY = canv.height;
+}
+
+function renderTiles() {
+	let tileY = 0;
+	let tileX = 0;
+	for (let i=0; i<map.tiles.length; i++) {
+		TileSet.drawTile(ctx, 'a', tileX - scrollX, tileY - scrollY);
+		tileX += 40;
+		if (tileX == map.length * canv.width) {
+			tileY += 40;
+			tileX = 0;
+		}
+	}
+
+	tileY = 0;
+	tileX = 0;
+	for (let i=0; i<map.tiles.length; i++) {
+		drawTile(tileX, tileY, i);
+		tileX += 40;
+		if (tileX == map.length * canv.width) {
+			tileY += 40;
+			tileX = 0;
+		}
+	}
+}
+
+function drawTile(x, y, type) {
+	let place = map.tiles.charAt(type)
+	if (place !== 'a') {
+		TileSet.drawTile(ctx, place, x-scrollX, y-scrollY);
+	}
+}
+
+function rect (x, y, w, h, c) {
+	ctx.fillStyle = c;
+	ctx.fillRect(x, y, w, h);
+}
+
+function randomColor() {
+	return '#'+(0x1000000+(Math.random())*0xffffff).toString(16).substr(1,6);
+}
+
+function copyMapIdToClipboard(mapId) {
+	mapId = mapId || map.tiles;
+	const lines = [];
+	const tilesPerRow = canv.width * map.length / 40;
+	const rows = canv.height * map.height / 40;
+	for(let i = 0; i < tilesPerRow * rows; i += tilesPerRow) {
+		lines.push("\"" + mapId.substr(i, tilesPerRow) + "\"");
+	}
+	mapId = lines.join(" +\n") + ";"
+	var textArea = document.createElement("textarea");
+	textArea.value = mapId;
+	textArea.style.top = "0";
+	textArea.style.left = "0";
+	textArea.style.position = "fixed";
+	document.body.appendChild(textArea);
+	textArea.focus();
+	textArea.select();
+	document.execCommand('copy');
+	console.log(mapId);
+	console.log("copied map id");
+	document.body.removeChild(textArea);
+}
+// Designed by Adam Pettys 4/10/2023
+	</script>
+</body>
+</html>
